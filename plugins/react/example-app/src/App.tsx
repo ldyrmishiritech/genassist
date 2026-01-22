@@ -25,7 +25,7 @@ function App() {
   }
 
   const [theme, setTheme] = useState({
-    primaryColor: "#1bb600ff",
+    primaryColor: "#4F46E5",
     secondaryColor: "#f5f5f5",
     backgroundColor: "#ffffff",
     textColor: "#000000",
@@ -34,12 +34,12 @@ function App() {
   });
 
   const [chatSettings, setChatSettings] = useState({
-    name: "PayByPhone Support",
+    name: "Genassist Support",
     description: "Support",
     agentName: "Agent",
-    logoUrl: "https://www.lausanne-tourisme.ch/app/uploads/2025/06/pay-by-phone.png",
+    logoUrl: "http://example.com/",
     baseUrl: "http://localhost:8000/",
-    apiKey: "Hwi7_hSzDu1JNAddVqMPfVV8pLvuG4Cq4aRqS5JVKx0FXSXqqIP87g",
+    apiKey: "genagent",
     // reCaptchaKey: "xx-yy-zz",
   });
 
