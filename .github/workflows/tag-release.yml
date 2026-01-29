@@ -1,0 +1,69 @@
+name: Tag & Release (template-based notes)
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write  # push tags + create release
+
+jobs:
+  tag_and_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --tags --force
+
+      - name: Compute next patch tag (vMAJOR.MINOR.PATCH)
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1 || true)"
+          if [[ -z "$latest" ]]; then
+            latest="v1.0.0"
+          fi
+
+          v="${latest#v}"
+          IFS='.' read -r major minor patch <<< "$v"
+          patch=$((patch + 1))
+          next="v${major}.${minor}.${patch}"
+
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+          echo "Latest: $latest"
+          echo "Next:   $next"
+
+      - name: Create and push tag
+        shell: bash
+        env:
+          TAG: ${{ steps.ver.outputs.next }}
+        run: |
+          set -euo pipefail
+
+          # if rerun, don't fail
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. Skipping."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release (uses .github/release.yml)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.next }}
+          target_commitish: main
+          generate_release_notes: true
