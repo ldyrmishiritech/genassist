@@ -1,0 +1,27 @@
+changelog:
+  categories:
+    - title: 🚀 Features
+      labels:
+        - backend
+        - frontend
+        - enhacement
+
+    - title: 🐛 Fixes
+      labels:
+        - bug
+        - fix
+
+    - title: 🔐 Security
+      labels:
+        - security-issuue
+
+    - title: 🧰 Maintenance
+      labels:
+        - chore
+        - refactor
+        - ci
+        - docs
+
+  exclude:
+    labels:
+      - skip-changelog
