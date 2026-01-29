@@ -1,0 +1,42 @@
+name-template: "GenAssist $RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+version-resolver:
+  major:
+    labels: ["release:major", "breaking"]
+  minor:
+    labels: ["release:minor", "feature", "enhancement"]
+  patch:
+    labels: ["release:patch", "fix", "bug", "security", "chore", "refactor", "ci", "docs"]
+  default: patch
+
+change-template: "- $TITLE (#$NUMBER)"
+exclude-labels:
+  - skip-changelog
+  - "release-notes:ignore"
+
+categories:
+  - title: "Security & Compliance"
+    labels: ["security"]
+  - title: "Agent & Conversation Improvements"
+    labels: ["agent", "conversation"]
+  - title: "Knowledge Base, RAG & Integrations"
+    labels: ["rag", "kb", "integration"]
+  - title: "File Manager"
+    labels: ["file-manager"]
+  - title: "Frontend & UX"
+    labels: ["frontend", "ux", "ui"]
+  - title: "Infrastructure, DevOps & CI/CD"
+    labels: ["devops", "ci", "infra"]
+  - title: "Plugin & SDK"
+    labels: ["plugin", "sdk"]
+  - title: "Refactoring & Internal Improvements"
+    labels: ["refactor", "internal", "chore", "docs"]
+  - title: "Other Changes"
+    labels: ["*"]
+
+template: |
+  ## GenAssist v$RESOLVED_VERSION
+  This release focuses on security hardening, agent & RAG improvements, UI/UX enhancements, and infrastructure reliability.
+
+  $CHANGES
