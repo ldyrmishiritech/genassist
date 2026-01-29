@@ -1,13 +1,17 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
-import { ChatMessageComponent, AttachmentPreview } from './ChatMessage';
+import { ChatMessageComponent } from './ChatMessage';
+import { AttachmentPreview } from './common/AttachmentPreview';
 import { useChat } from '../hooks/useChat';
-import { ChatMessage, GenAgentChatProps, ScheduleItem } from '../types';
+import { ChatMessage, GenAgentChatProps, ScheduleItem, Attachment, AttachmentWithFile } from '../types';
 import { VoiceInput } from './VoiceInput';
 import { AudioService } from '../services/audioService';
-import { Send, Paperclip, MoreVertical, RefreshCw, Globe, X, ArrowUp } from 'lucide-react';
+import { Paperclip, MoreVertical, RefreshCw, Globe, X, ArrowUp, Maximize2, Minimize2 } from 'lucide-react';
 import { ChatBubble } from './ChatBubble';
 import { LanguageSelector } from './LanguageSelector';
 import chatLogo from '../assets/chat-logo.png';
+
+// Type for attachment with file reference
+
 import {
   resolveLanguage,
   mergeTranslations,
@@ -17,16 +21,19 @@ import {
 } from '../utils/i18n';
 import { GoogleReCaptcha, GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 
+
 export const GenAgentChat: React.FC<GenAgentChatProps> = ({
   baseUrl,
   apiKey,
   tenant,
   metadata,
+  useWs = true,
   onError,
   onTakeover,
   onFinalize,
   theme,
   headerTitle = 'Genassist',
+  description,
   placeholder,
   agentName,
   logoUrl,
@@ -35,6 +42,12 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
   language,
   translations: customTranslations,
   reCaptchaKey,
+  widget = false,
+  useAudio = false,
+  useFile = false,
+  noColorAnimation = false,
+  showWelcomeBeforeStart = true,
+  allowedExtensions = [],
 }): React.ReactElement => {
   // Language selection state (with localStorage persistence)
   const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
@@ -95,7 +108,7 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isFloatingOpen, setIsFloatingOpen] = useState(false);
-  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentWithFile[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set());
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +116,7 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerHeight, setHeaderHeight] = useState(56);
   const [showBacklight, setShowBacklight] = useState(false);
+  const [isFullscreenToggled, setIsFullscreenToggled] = useState(false);
 
   // default thinking messages if none provided by workflow
   const DEFAULT_THINKING_MESSAGES = useMemo(
@@ -143,6 +157,7 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
     apiKey,
     tenant,
     metadata: metadataWithLanguage,
+    useWs,
     language: resolvedLanguage,
     onError,
     onTakeover,
@@ -210,11 +225,18 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
     hasAnchoredHistory.current = false;
   }, [conversationId]);
 
+  // Ensure chat is always open when mode is fullscreen
+  useEffect(() => {
+    if (mode === 'fullscreen' && !isFloatingOpen) {
+      setIsFloatingOpen(true);
+    }
+  }, [mode, isFloatingOpen]);
+
   // Scroll to bottom when chat is reopened in floating mode
   const prevIsFloatingOpenRef = useRef(isFloatingOpen);
   useEffect(() => {
     // Only trigger when chat transitions from closed to open
-    if (mode === 'floating' && isFloatingOpen && !prevIsFloatingOpenRef.current && messages.length > 0) {
+    if ((mode === 'floating' || mode === 'fullscreen') && isFloatingOpen && !prevIsFloatingOpenRef.current && messages.length > 0) {
       // Reset the anchor flag so it can scroll to bottom
       hasAnchoredHistory.current = false;
       isUserAtBottomRef.current = true;
@@ -359,17 +381,31 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
     if (inputValue.trim() === '' && attachments.length === 0) return;
     if (isAgentTyping) return; // Prevent sending while agent is thinking/typing
     const textToSend = inputValue;
-    const filesToUpload = [...attachments];
+    // NOTES: we don't upload files anymore, we just send the content blocks
+    const filesToUpload = attachments.map(a => a.file);
+    // const fileAttachments = attachments.map(a => a.attachment);
+
     setInputValue('');
     setAttachments([]);
     // Reset the file input value so the same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+
     try {
       // Include FAQ query in metadata if one was previously selected
-      const extraMetadata = selectedFaqQuery ? { faq_query: selectedFaqQuery } : undefined;
-      await sendMessage(textToSend, filesToUpload, extraMetadata);
+      const extraMetadata: Record<string, any> = {};
+
+      if (selectedFaqQuery) {
+        extraMetadata.faq_query = selectedFaqQuery;
+      }
+
+      if (filesToUpload.length > 0) {
+        extraMetadata.attachments = attachments.map(a => a.attachment);
+      }
+      
+      // send message with attachments
+      await sendMessage(textToSend, filesToUpload, extraMetadata, reCaptchaTokenRef.current);
     } catch (error) {
       // ignore
     }
@@ -386,7 +422,7 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
     try {
       // Include FAQ query in metadata if one was previously selected
       const extraMetadata = selectedFaqQuery ? { faq_query: selectedFaqQuery } : undefined;
-      await sendMessage(text, [], extraMetadata);
+      await sendMessage(text, [], extraMetadata, reCaptchaTokenRef.current);
     } catch (error) {
       // ignore quick action errors to avoid interrupting the flow
     }
@@ -395,39 +431,74 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
   const handleScheduleConfirm = async (schedule: ScheduleItem) => {
     const summary = `Schedule confirmed with ${schedule.restaurants.length} restaurants`;
     try {
-      await sendMessage(summary, [], { confirmSchedule: JSON.stringify(schedule) });
+      await sendMessage(summary, [], { confirmSchedule: JSON.stringify(schedule) }, reCaptchaTokenRef.current);
     } catch (error) {
       // ignore
     }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
+    if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
-      setAttachments(prev => [...prev, ...newFiles]);
+      
+      // Initialize attachments with files (attachment reference will be null initially)
+      const newAttachments: AttachmentWithFile[] = newFiles.map(file => ({file, attachment: null}));
+      setAttachments(prev => [...prev, ...newAttachments]);
 
       const newUploadingFiles = new Set(uploadingFiles);
       newFiles.forEach(file => newUploadingFiles.add(file.name));
       setUploadingFiles(newUploadingFiles);
 
       try {
-        await Promise.all(newFiles.map(file => uploadFile(file)));
+        // Upload files and get attachment references
+        const uploadResults = await Promise.all(
+          newFiles.map(async (file, index) => ({
+            file,
+            index,
+            attachment: await uploadFile(file),
+          }))
+        );
+
+        // Create a map of file reference (name + size + lastModified) to uploaded attachment
+        const fileToAttachmentMap = new Map<string, Attachment | null>();
+        uploadResults.forEach(({ file, attachment }) => {
+          const fileKey = `${file.name}:${file.size}:${file.lastModified}`;
+          fileToAttachmentMap.set(fileKey, attachment);
+        });
+
+        // Update attachments with the uploaded file references
+        setAttachments(prev => {
+          return prev.map(att => {
+            const fileKey = `${att.file.name}:${att.file.size}:${att.file.lastModified}`;
+            const uploadedAttachment = fileToAttachmentMap.get(fileKey);
+            
+            // If this attachment matches one of the newly uploaded files, update it
+            if (uploadedAttachment !== undefined) {
+              return {
+                ...att,
+                attachment: uploadedAttachment,
+              };
+            }
+            return att;
+          });
+        });
       } catch (error) {
         // ignore
+        console.error('Error uploading file', error);
       } finally {
         const finalUploadingFiles = new Set(uploadingFiles);
         newFiles.forEach(file => finalUploadingFiles.delete(file.name));
         setUploadingFiles(finalUploadingFiles);
         // Reset the file input value so the same file can be selected again
         if (fileInputRef.current) {
-          fileInputRef.current.value = '';
+          fileInputRef.current!.value = '';
         }
       }
     }
   };
 
   const handleRemoveAttachment = (fileName: string) => {
-    setAttachments(prev => prev.filter(f => f.name !== fileName));
+    setAttachments(prev => prev.filter(att => att.file.name !== fileName));
   };
 
   const handleVoiceError = (error: Error) => {
@@ -459,7 +530,7 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
     setSelectedFaqQuery(query);
     
     try {
-      await sendMessage(query, [], { faq_query: query });
+      await sendMessage(query, [], { faq_query: query }, reCaptchaTokenRef.current);
     } catch (error) {
       // ignore
     }
@@ -467,6 +538,13 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
 
   const handleStartConversation = async () => {
     if (isLoading) return;
+
+    // Clear input text and file attachments when starting a conversation
+    setInputValue('');
+    setAttachments([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
 
     try {
       await startConversation(reCaptchaTokenRef.current);
@@ -485,6 +563,13 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
   };
 
   const handleConfirmReset = async () => {
+    // Clear input text and file attachments when restarting
+    setInputValue('');
+    setAttachments([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
     await resetConversation(reCaptchaTokenRef.current);
     setSelectedFaqQuery(null); // Clear FAQ query on reset
     setShowResetConfirm(false);
@@ -498,13 +583,25 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
     setSelectedLanguage(lang);
   };
 
+  const handleFullscreenToggle = () => {
+    setIsFullscreenToggled(prev => !prev);
+    setShowMenu(false);
+  };
+
   // Track window resize to update mobile detection
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   
-  // Automatically determine if should be fullscreen (mobile devices)
+  // Automatically determine if should be fullscreen (mobile devices or widget mode or manual toggle or fullscreen mode)
   const isFullscreen = useMemo(() => {
+    // If mode is fullscreen, always fullscreen
+    if (mode === 'fullscreen') return true;
+    // If widget prop is true, always fullscreen
+    if (widget) return true;
+    // If manually toggled, use toggle state
+    if (isFullscreenToggled) return true;
+    // Otherwise, use mobile detection
     return windowWidth <= 768;
-  }, [windowWidth]);
+  }, [windowWidth, widget, isFullscreenToggled, mode]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -954,7 +1051,7 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
   };
 
   const floatingContainerStyle: React.CSSProperties = {
-    ...(isFullscreen && windowWidth <= 768 
+    ...((mode === 'fullscreen' || (isFullscreen && windowWidth <= 768))
       ? { 
           position: 'fixed',
           top: 0,
@@ -1037,7 +1134,9 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
           <img src={logoUrl?.trim() || chatLogo} alt="Logo" style={logoStyle} />
           <div style={headerTitleContainerStyle}>
             <div style={headerTitleStyle}>{headerTitle}</div>
-            <div style={headerSubtitleStyle}>{t('header.subtitle')}</div>
+            <div style={headerSubtitleStyle}>
+              {description ?? t('header.subtitle')}
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1059,7 +1158,7 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
           )}
         </div>
       </div>
-      {showBacklight && (
+      {!noColorAnimation && showBacklight && (
         <div
           style={{
             position: 'absolute',
@@ -1097,6 +1196,12 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
             <RefreshCw size={16} />
             {t('menu.resetConversation')}
           </div>
+          {mode !== 'fullscreen' && (
+            <div style={menuItemStyle} onClick={handleFullscreenToggle}>
+              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              {t('menu.fullscreen')}
+            </div>
+          )}
           <div 
             style={{ ...menuItemStyle, position: 'relative', borderBottom: 'none' }}
             onClick={(e) => {
@@ -1183,8 +1288,9 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
             return null;
           })()}
           {(() => {
-            // show welcome card
+            // show welcome card (only when showWelcomeBeforeStart is true)
             const shouldShowSyntheticWelcome =
+              showWelcomeBeforeStart &&
               !hasUserMessages &&
               (messages.length === 0 || messages[0].speaker !== 'agent') &&
               (Boolean(welcomeTitle) || Boolean(welcomeImageUrl) || Boolean(welcomeMessage));
@@ -1223,10 +1329,17 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
           })()}
           {(() => {
             const firstAgentIndex = messages.findIndex(m => m.speaker === 'agent');
-            return messages.map((message, index) => {
+
+            const applyMessageFilter = (message: any) => {
+              // filter out file messages added by the agent
+              return message.type !== 'file';
+            }
+
+            return messages.filter(applyMessageFilter).map((message, index) => {
               const isNextSameSpeaker = index < messages.length - 1 && messages[index + 1].speaker === message.speaker;
               const isPrevSameSpeaker = index > 0 && messages[index - 1].speaker === message.speaker;
               const isFirstAgentMessage = index === firstAgentIndex && message.speaker === 'agent' && !hasUserMessages;
+
               return (
                 <ChatMessageComponent 
                   key={index} 
@@ -1279,7 +1392,7 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
           )}
           <div ref={messagesEndRef} />
         </div>
-        {(() => {
+        {showWelcomeBeforeStart && (() => {
           const showingSyntheticWelcome =
             !hasUserMessages &&
             (messages.length === 0 || messages[0].speaker !== 'agent') &&
@@ -1305,14 +1418,14 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
           </div>
         )}
         
-        {attachments.length > 0 && (
+        {useFile && attachments.length > 0 && (
           <div style={{ padding: '0 16px', marginBottom: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {attachments.map((file, index) => (
+            {attachments.map((att, index) => (
               <AttachmentPreview 
                 key={index} 
-                file={file} 
-                onRemove={() => handleRemoveAttachment(file.name)}
-                uploading={uploadingFiles.has(file.name)}
+                file={att.file} 
+                onRemove={() => handleRemoveAttachment(att.file.name)}
+                uploading={uploadingFiles.has(att.file.name)}
               />
             ))}
           </div>
@@ -1332,22 +1445,27 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
         ) : (
           <form onSubmit={handleSubmit} style={inputContainerStyle}>
             <div style={inputWrapperStyle}>
-              <button 
-                type="button" 
-                style={attachButtonStyle}
-                title="Attach"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isAgentTyping}
-              >
-                <Paperclip size={22} color={isAgentTyping ? "#b0b0b0" : "#757575"} />
-              </button>
-              <input
-                type="file"
-                multiple
-                ref={fileInputRef}
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-              />
+              {useFile && (
+                <>
+                  <button 
+                    type="button" 
+                    style={attachButtonStyle}
+                    title="Attach"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isAgentTyping}
+                  >
+                    <Paperclip size={22} color={isAgentTyping ? "#b0b0b0" : "#757575"} />
+                  </button>
+                  <input
+                    type="file"
+                    multiple
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                    onChange={handleFileChange}
+                    accept={allowedExtensions.join(',') || '*/*'}
+                  />
+                </>
+              )}
               <textarea
                 ref={textAreaRef}
                 style={textAreaStyle}
@@ -1367,7 +1485,7 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
                 rows={1}
               />
               <div style={rightActionContainerStyle}>
-                {inputValue.trim() === '' && attachments.length === 0 ? (
+                {useAudio && inputValue.trim() === '' && attachments.length === 0 ? (
                   <VoiceInput
                     onTranscription={(text: string) => setInputValue(text)}
                     onError={handleVoiceError}
@@ -1422,6 +1540,14 @@ export const GenAgentChat: React.FC<GenAgentChatProps> = ({
           </div>
         )}
       </>
+    );
+  }
+
+  if (mode === 'fullscreen') {
+    return (
+      <div style={floatingContainerStyle} data-genassist-container="fullscreen">
+        {renderWithReCaptcha(renderChatComponent())}
+      </div>
     );
   }
 

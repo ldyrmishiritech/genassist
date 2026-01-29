@@ -38,6 +38,8 @@ from app.schemas.agent import AgentRead
 from app.schemas.conversation import ConversationRead
 from app.schemas.conversation_transcript import (
     ConversationTranscriptCreate,
+    ConversationStartWithRecaptchaToken,
+    ConversationUpdateWithRecaptchaToken,
     InProgConvTranscrUpdate,
     InProgressConversationTranscriptFinalize,
     TranscriptSegmentFeedback,
@@ -49,14 +51,16 @@ from app.services.conversations import ConversationService
 from app.services.transcript_message_service import TranscriptMessageService
 from app.services.auth import AuthService
 from app.core.tenant_scope import get_tenant_context
-from app.use_cases.chat_as_client_use_case import process_conversation_update_with_agent
+from app.use_cases.chat_as_client_use_case import (
+    process_conversation_update_with_agent,
+    process_attachments_from_metadata,
+)
 from app.core.permissions.constants import Permissions as P
 from app.core.utils.recaptcha_utils import verify_recaptcha_token
-
+from app.services.file_manager import FileManagerService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
 
 @router.get(
     "/{conversation_id}",
@@ -89,10 +93,8 @@ async def get(
 @limiter.limit(get_agent_rate_limit_start_hour)
 async def start(
     request: Request,
-    model: ConversationTranscriptCreate,
-    response: Response,
+    model: ConversationStartWithRecaptchaToken,
     service: ConversationService = Injected(ConversationService),
-    agent_config_service: AgentConfigService = Injected(AgentConfigService),
     auth_service: AuthService = Injected(AuthService),
 ):
     """
@@ -107,8 +109,9 @@ async def start(
 
     logger.debug(f"agent: {agent.name}")
 
-    # Verify reCAPTCHA token if it is present, using agent-specific settings
-    is_valid, score, reason = verify_recaptcha_token(model.recaptcha_token, agent=agent)
+    # Verify reCAPTCHA token if it is present in the request body, using agent-specific settings
+    reCaptchaToken = model.recaptcha_token or None
+    is_valid, score, reason = verify_recaptcha_token(reCaptchaToken, agent=agent)
     if not is_valid:
         logger.warning(f"reCAPTCHA verification failed: {reason}")
         raise AppException(
@@ -198,7 +201,6 @@ async def update_no_agent(
     request: Request,
     conversation_id: UUID,
     model: InProgConvTranscrUpdate,
-    response: Response,
     service: ConversationService = Injected(ConversationService),
     socket_connection_manager: SocketConnectionManager = Injected(
         SocketConnectionManager
@@ -324,13 +326,38 @@ async def update_no_agent(
 async def update(
     request: Request,
     conversation_id: UUID,
-    model: InProgConvTranscrUpdate,
+    model: ConversationUpdateWithRecaptchaToken,
+    file_manager_service: FileManagerService = Injected(FileManagerService),
 ):
     """
     Append segments to an existing in-progress conversation.
     If agent.security_settings.token_based_auth is true, only accepts JWT tokens (rejects API keys).
     """
     tenant_id = get_tenant_context()
+
+    # Get agent from request.state (set by get_agent_for_start dependency)
+    agent = getattr(request.state, "agent", None)
+    if not agent:
+        logger.debug("agent not found")
+        raise AppException(error_key=ErrorKey.AGENT_NOT_FOUND, status_code=404)
+    
+    # validate recaptcha token
+    reCaptchaToken = model.recaptcha_token or None
+    is_valid, score, reason = verify_recaptcha_token(reCaptchaToken, agent=agent)
+    if not is_valid:
+        logger.warning(f"reCAPTCHA verification failed: {reason}")
+        raise AppException(
+            error_key=ErrorKey.RECAPTCHA_VERIFICATION_FAILED, status_code=403
+        )
+
+    # process attachments from metadata
+    await process_attachments_from_metadata(
+        conversation_id=conversation_id,
+        model=model,
+        tenant_id=tenant_id,
+        current_user_id=get_current_user_id(),
+        file_manager_service=file_manager_service,
+    )
 
     updated_conversation = await process_conversation_update_with_agent(
         conversation_id=conversation_id,

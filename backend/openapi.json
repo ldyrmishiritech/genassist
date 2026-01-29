@@ -3791,7 +3791,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConversationTranscriptCreate"
+                "$ref": "#/components/schemas/ConversationStartWithRecaptchaToken"
               }
             }
           },
@@ -3922,7 +3922,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InProgConvTranscrUpdate"
+                "$ref": "#/components/schemas/ConversationUpdateWithRecaptchaToken"
               }
             }
           }
@@ -6045,7 +6045,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/KBBase"
+                "$ref": "#/components/schemas/KBCreate"
               }
             }
           },
@@ -6402,11 +6402,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object",
-                  "title": "Response Upload File To Chat Api Genagent Knowledge Upload Chat File Post"
+                  "$ref": "#/components/schemas/app__schemas__file__FileUploadResponse"
                 }
               }
             }
@@ -8079,6 +8075,451 @@
         }
       }
     },
+    "/api/file-manager/files": {
+      "post": {
+        "tags": [
+          "v1",
+          "FileManager"
+        ],
+        "summary": "Create File",
+        "description": "Upload and create a new file.",
+        "operationId": "create_file_api_file_manager_files_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          },
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "v1",
+          "FileManager"
+        ],
+        "summary": "List Files",
+        "description": "List files with optional filtering.",
+        "operationId": "list_files_api_file_manager_files_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          },
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storage_provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Storage Provider"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileResponse"
+                  },
+                  "title": "Response List Files Api File Manager Files Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/file-manager/files/{file_id}": {
+      "get": {
+        "tags": [
+          "v1",
+          "FileManager"
+        ],
+        "summary": "Get File",
+        "description": "Get file metadata by ID.",
+        "operationId": "get_file_api_file_manager_files__file_id__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          },
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "v1",
+          "FileManager"
+        ],
+        "summary": "Update File",
+        "description": "Update file metadata.",
+        "operationId": "update_file_api_file_manager_files__file_id__put",
+        "security": [
+          {
+            "APIKeyHeader": []
+          },
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "v1",
+          "FileManager"
+        ],
+        "summary": "Delete File",
+        "description": "Delete a file.",
+        "operationId": "delete_file_api_file_manager_files__file_id__delete",
+        "security": [
+          {
+            "APIKeyHeader": []
+          },
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          },
+          {
+            "name": "delete_from_storage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Delete From Storage"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/file-manager/files/{file_id}/download": {
+      "get": {
+        "tags": [
+          "v1",
+          "FileManager"
+        ],
+        "summary": "Download File",
+        "description": "Download a file by ID.",
+        "operationId": "download_file_api_file_manager_files__file_id__download_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/file-manager/files/{file_id}/source": {
+      "get": {
+        "tags": [
+          "v1",
+          "FileManager"
+        ],
+        "summary": "Get File Source",
+        "description": "Get file source content for inline display.",
+        "operationId": "get_file_source_api_file_manager_files__file_id__source_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/file-manager/files/{file_id}/base64": {
+      "get": {
+        "tags": [
+          "v1",
+          "FileManager"
+        ],
+        "summary": "Get File Base64",
+        "description": "Get file content as base64 encoded string (public endpoint).",
+        "operationId": "get_file_base64_api_file_manager_files__file_id__base64_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ml-models/": {
       "get": {
         "tags": [
@@ -8346,7 +8787,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FileUploadResponse"
+                  "$ref": "#/components/schemas/app__schemas__ml_model__FileUploadResponse"
                 }
               }
             }
@@ -14930,6 +15371,117 @@
         ],
         "title": "ConversationRead"
       },
+      "ConversationStartWithRecaptchaToken": {
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegmentInput"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "operator_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Id"
+          },
+          "data_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Source Id"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "llm_analyst_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Analyst Id"
+          },
+          "recorded_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded At"
+          },
+          "recaptcha_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recaptcha Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "title": "ConversationStartWithRecaptchaToken"
+      },
       "ConversationStatus": {
         "type": "string",
         "enum": [
@@ -15041,6 +15593,46 @@
               }
             ],
             "title": "Recorded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "title": "ConversationTranscriptCreate"
+      },
+      "ConversationUpdateWithRecaptchaToken": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegmentInput"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "llm_analyst_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Analyst Id"
           },
           "recaptcha_token": {
             "anyOf": [
@@ -15058,7 +15650,7 @@
         "required": [
           "messages"
         ],
-        "title": "ConversationTranscriptCreate"
+        "title": "ConversationUpdateWithRecaptchaToken"
       },
       "CreateFineTuningJobRequest": {
         "properties": {
@@ -15665,25 +16257,459 @@
         ],
         "title": "Feedback"
       },
-      "FileUploadResponse": {
+      "FileCreate": {
         "properties": {
-          "file_path": {
+          "name": {
             "type": "string",
-            "title": "File Path",
-            "description": "Path to the uploaded file"
+            "maxLength": 500,
+            "title": "Name",
+            "description": "File name"
           },
-          "original_filename": {
+          "path": {
             "type": "string",
-            "title": "Original Filename",
-            "description": "Original name of the uploaded file"
+            "maxLength": 1000,
+            "title": "Path",
+            "description": "File path"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size",
+            "description": "File size in bytes"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type",
+            "description": "MIME type"
+          },
+          "storage_provider": {
+            "type": "string",
+            "enum": [
+              "local",
+              "s3",
+              "azure",
+              "gcs",
+              "sharepoint"
+            ],
+            "title": "Storage Provider",
+            "description": "Storage provider",
+            "default": "local"
+          },
+          "storage_path": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Storage Path",
+            "description": "Path in storage provider"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "File description"
+          },
+          "file_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Metadata",
+            "description": "File metadata"
+          },
+          "file_extension": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Extension",
+            "description": "File extension"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags",
+            "description": "File tags"
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permissions",
+            "description": "File permissions"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "File to upload"
           }
         },
         "type": "object",
         "required": [
-          "file_path",
-          "original_filename"
+          "name",
+          "path",
+          "storage_path",
+          "file"
         ],
-        "title": "FileUploadResponse"
+        "title": "FileCreate"
+      },
+      "FileResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Name",
+            "description": "File name"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Path",
+            "description": "File path"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size",
+            "description": "File size in bytes"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type",
+            "description": "MIME type"
+          },
+          "storage_provider": {
+            "type": "string",
+            "enum": [
+              "local",
+              "s3",
+              "azure",
+              "gcs",
+              "sharepoint"
+            ],
+            "title": "Storage Provider",
+            "description": "Storage provider",
+            "default": "local"
+          },
+          "storage_path": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Storage Path",
+            "description": "Path in storage provider"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "File description"
+          },
+          "file_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Metadata",
+            "description": "File metadata"
+          },
+          "file_extension": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Extension",
+            "description": "File extension"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags",
+            "description": "File tags"
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permissions",
+            "description": "File permissions"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "is_deleted": {
+            "type": "integer",
+            "title": "Is Deleted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "storage_path",
+          "id",
+          "created_at",
+          "updated_at",
+          "is_deleted"
+        ],
+        "title": "FileResponse"
+      },
+      "FileUpdate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Name",
+            "description": "File name"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Path",
+            "description": "File path"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size",
+            "description": "File size in bytes"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type",
+            "description": "MIME type"
+          },
+          "storage_provider": {
+            "type": "string",
+            "enum": [
+              "local",
+              "s3",
+              "azure",
+              "gcs",
+              "sharepoint"
+            ],
+            "title": "Storage Provider",
+            "description": "Storage provider",
+            "default": "local"
+          },
+          "storage_path": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Storage Path",
+            "description": "Path in storage provider"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "File description"
+          },
+          "file_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Metadata",
+            "description": "File metadata"
+          },
+          "file_extension": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Extension",
+            "description": "File extension"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags",
+            "description": "File tags"
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permissions",
+            "description": "File permissions"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "binary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File",
+            "description": "File to upload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "storage_path"
+        ],
+        "title": "FileUpdate"
       },
       "FolderRequest": {
         "properties": {
@@ -16235,16 +17261,19 @@
             ],
             "title": "Llm Provider Id"
           },
-          "url": {
+          "urls": {
             "anyOf": [
               {
-                "type": "string"
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Url"
+            "title": "Urls"
           }
         },
         "additionalProperties": true,
@@ -16253,6 +17282,266 @@
           "name"
         ],
         "title": "KBBase"
+      },
+      "KBCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "file",
+              "url",
+              "text",
+              "datasource",
+              "s3",
+              "database",
+              "sharepoint",
+              "smb_share_folder",
+              "azure_blob",
+              "google_bucket",
+              "zendesk"
+            ],
+            "title": "Type",
+            "default": "file"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "file_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Path"
+          },
+          "file_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Type"
+          },
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "vector_store": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Store"
+          },
+          "rag_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rag Config"
+          },
+          "extra_metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Extra Metadata"
+          },
+          "embeddings_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embeddings Model"
+          },
+          "legra_finalize": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legra Finalize",
+            "default": false
+          },
+          "last_synced": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced"
+          },
+          "last_sync_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync Status"
+          },
+          "last_sync_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync Error"
+          },
+          "last_file_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last File Date"
+          },
+          "sync_schedule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Schedule"
+          },
+          "sync_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Active"
+          },
+          "sync_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Source Id"
+          },
+          "llm_provider_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Provider Id"
+          },
+          "urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urls"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "KBCreate",
+        "description": "Body model for POST / PUT (no id)"
       },
       "KBRead": {
         "properties": {
@@ -16491,16 +17780,19 @@
             ],
             "title": "Llm Provider Id"
           },
-          "url": {
+          "urls": {
             "anyOf": [
               {
-                "type": "string"
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Url"
+            "title": "Urls"
           },
           "id": {
             "type": "string",
@@ -19397,6 +20689,68 @@
         ],
         "title": "TranscriptMessageRead"
       },
+      "TranscriptSegmentAttachment": {
+        "properties": {
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "title": "TranscriptSegmentAttachment"
+      },
       "TranscriptSegmentFeedback": {
         "properties": {
           "feedback": {
@@ -19466,6 +20820,20 @@
             ],
             "title": "Type",
             "default": "message"
+          },
+          "attachments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TranscriptSegmentAttachment"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachments"
           }
         },
         "type": "object",
@@ -20877,6 +22245,70 @@
           "filepath"
         ],
         "title": "FileRequest"
+      },
+      "app__schemas__file__FileUploadResponse": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "File name"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename",
+            "description": "Original file name"
+          },
+          "storage_path": {
+            "type": "string",
+            "title": "Storage Path",
+            "description": "Storage path"
+          },
+          "file_path": {
+            "type": "string",
+            "title": "File Path",
+            "description": "File path"
+          },
+          "file_url": {
+            "type": "string",
+            "title": "File Url",
+            "description": "File URL"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id",
+            "description": "File ID"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "original_filename",
+          "storage_path",
+          "file_path",
+          "file_url",
+          "file_id"
+        ],
+        "title": "FileUploadResponse"
+      },
+      "app__schemas__ml_model__FileUploadResponse": {
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "title": "File Path",
+            "description": "Path to the uploaded file"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename",
+            "description": "Original name of the uploaded file"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_path",
+          "original_filename"
+        ],
+        "title": "FileUploadResponse"
       }
     },
     "securitySchemes": {
