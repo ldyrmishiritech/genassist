@@ -61,6 +61,7 @@ from app.modules.workflow.llm.provider import LLMProvider
 from redis.asyncio import Redis
 from app.modules.data.manager import AgentRAGServiceManager
 from app.repositories.file_manager import FileManagerRepository
+from app.services.file_manager import FileManagerService
 # Multi-tenant session manager
 from app.core.tenant_scope import tenant_scope
 from app.db.multi_tenant_session import multi_tenant_manager
@@ -152,6 +153,7 @@ class Dependencies(Module):
         Provide tenant-aware session based on tenant context.
 
         Returns an AsyncSession instance managed by fastapi-injector's request scope.
+        Note: Sessions must be properly closed via middleware or cleanup mechanism.
         """
         from app.core.tenant_scope import get_tenant_context
 
@@ -159,8 +161,9 @@ class Dependencies(Module):
         logger.debug(f"DI: Tenant context: {tenant_id}")
 
         session_factory = multi_tenant_manager.get_tenant_session_factory(tenant_id)
-
-        return session_factory()
+        session = session_factory()
+        
+        return session
 
     def configure(self, binder):
         binder.bind(ToolService, scope=request_scope)
@@ -287,3 +290,4 @@ class Dependencies(Module):
 
         # File Manager services
         binder.bind(FileManagerRepository, scope=request_scope)
+        binder.bind(FileManagerService, scope=request_scope)

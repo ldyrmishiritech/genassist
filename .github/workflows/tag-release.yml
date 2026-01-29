@@ -1,0 +1,244 @@
+name: Create Git TAG and Release
+
+on:
+  pull_request:
+    branches: ["main"]
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    # Only when PR is merged AND head branch is development
+    if: ${{ github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'development' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --tags --force
+
+      - name: Compute version + generate release notes from PR labels
+        id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Find latest semver tag vX.Y.Z
+          prev_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1 || true)"
+          if [[ -z "$prev_tag" ]]; then
+            prev_tag="v1.0.0"
+          fi
+          echo "Previous tag: $prev_tag"
+
+          # Range of commits included in this release (from previous tag to current main HEAD)
+          range="${prev_tag}..HEAD"
+
+          # Collect unique PRs associated with commits in the range via GitHub GraphQL
+          # Then compute bump from labels, and format notes into your sections.
+          python3 - << 'PY'
+          import json, os, re, subprocess
+          from collections import defaultdict, OrderedDict
+
+          owner=os.environ["OWNER"]
+          repo=os.environ["REPO"]
+
+          def sh(cmd):
+            return subprocess.check_output(cmd, text=True).strip()
+
+          prev_tag = sh(["git","tag","-l","v[0-9]*.[0-9]*.[0-9]*","--sort=-v:refname"])
+          prev_tag = (prev_tag.splitlines()[0] if prev_tag else "v1.0.0")
+
+          # get commit SHAs between prev_tag and HEAD
+          commits = sh(["git","rev-list", f"{prev_tag}..HEAD"]).splitlines()
+          commits = [c for c in commits if c]
+          if not commits:
+            print("No commits since previous tag; nothing to release.")
+            # still exit gracefully with no outputs
+            open(os.environ["GITHUB_OUTPUT"],"a").write("skip=true\n")
+            raise SystemExit(0)
+
+          def gh_graphql(query, variables):
+            p = subprocess.run(
+              ["gh","api","graphql","-f", f"query={query}", "-f", f"variables={json.dumps(variables)}"],
+              text=True, capture_output=True
+            )
+            if p.returncode != 0:
+              raise RuntimeError(p.stderr)
+            return json.loads(p.stdout)
+
+          # Map labels -> bump
+          # Customize these to match your labels
+          def bump_priority(labels):
+            L=set([l.lower() for l in labels])
+            if "release:major" in L or "breaking" in L:
+              return 3
+            if "release:minor" in L or "feature" in L or "enhancement" in L:
+              return 2
+            if ("release:patch" in L or "bug" in L or "fix" in L or "security" in L or
+                "ci" in L or "devops" in L or "refactor" in L or "chore" in L or "docs" in L):
+              return 1
+            return 1  # default patch
+
+          # Sections (label-driven)
+          sections = OrderedDict([
+            ("Security & Compliance", {"security", "compliance"}),
+            ("Agent & Conversation Improvements", {"agent", "conversation"}),
+            ("Knowledge Base, RAG & Integrations", {"rag", "kb", "integration"}),
+            ("File Manager", {"file-manager", "filemanager"}),
+            ("Frontend & UX", {"frontend", "ui", "ux"}),
+            ("Infrastructure, DevOps & CI/CD", {"devops", "ci", "infra", "docker"}),
+            ("Docker & Deployment Fixes", {"deployment", "ports", "postgres", "database"}),
+            ("Plugin & SDK", {"plugin", "sdk"}),
+            ("Refactoring & Internal Improvements", {"refactor", "internal", "chore"}),
+          ])
+
+          def pick_section(labels):
+            L=set([l.lower() for l in labels])
+            for title, keys in sections.items():
+              if L.intersection(keys):
+                return title
+            return "Other Changes"
+
+          # For each commit, ask GitHub which PR(s) are associated with it
+          pr_by_number = {}  # number -> {title, labels}
+          query = """
+          query($owner:String!, $repo:String!, $oid:GitObjectID!) {
+            repository(owner:$owner, name:$repo) {
+              object(oid:$oid) {
+                ... on Commit {
+                  associatedPullRequests(first: 20) {
+                    nodes {
+                      number
+                      title
+                      labels(first: 50) { nodes { name } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          """
+
+          for sha in commits:
+            data = gh_graphql(query, {"owner": owner, "repo": repo, "oid": sha})
+            nodes = (
+              data.get("data", {})
+                  .get("repository", {})
+                  .get("object", {})
+                  .get("associatedPullRequests", {})
+                  .get("nodes", [])
+            ) or []
+            for pr in nodes:
+              num = pr["number"]
+              if num in pr_by_number:
+                continue
+              labels = [n["name"] for n in (pr.get("labels", {}).get("nodes", []) or [])]
+              pr_by_number[num] = {"title": pr["title"].strip(), "labels": labels}
+
+          # Compute bump across all included PRs
+          max_bump = 1
+          for pr in pr_by_number.values():
+            max_bump = max(max_bump, bump_priority(pr["labels"]))
+
+          # Compute next version from prev_tag
+          m = re.match(r"^v(\d+)\.(\d+)\.(\d+)$", prev_tag)
+          if not m:
+            major, minor, patch = 1, 0, 0
+          else:
+            major, minor, patch = map(int, m.groups())
+
+          if max_bump == 3:
+            major += 1; minor = 0; patch = 0
+          elif max_bump == 2:
+            minor += 1; patch = 0
+          else:
+            patch += 1
+
+          next_tag = f"v{major}.{minor}.{patch}"
+
+          # Group PRs into sections
+          grouped = defaultdict(list)
+          for num, pr in sorted(pr_by_number.items(), key=lambda x: x[0]):
+            if "skip-changelog" in [l.lower() for l in pr["labels"]]:
+              continue
+            sec = pick_section(pr["labels"])
+            grouped[sec].append(pr["title"])
+
+          # Build notes in your desired style
+          intro = (
+            f"GenAssist {next_tag}\n"
+            "This release focuses on security hardening, agent & RAG improvements, UI/UX enhancements, and infrastructure reliability.\n"
+          )
+
+          lines = [intro]
+          for sec in sections.keys():
+            items = grouped.get(sec, [])
+            if not items:
+              continue
+            lines.append(sec)
+            for t in items:
+              lines.append(f"- {t}")
+            lines.append("")  # blank line
+
+          # Other Changes
+          other = grouped.get("Other Changes", [])
+          if other:
+            lines.append("Other Changes")
+            for t in other:
+              lines.append(f"- {t}")
+            lines.append("")
+
+          notes = "\n".join(lines).strip() + "\n"
+
+          # Write outputs + notes file
+          with open("RELEASE_NOTES.md","w",encoding="utf-8") as f:
+            f.write(notes)
+
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as f:
+            f.write(f"prev_tag={prev_tag}\n")
+            f.write(f"next_tag={next_tag}\n")
+
+          print(f"Prev: {prev_tag}")
+          print(f"Next: {next_tag}")
+          print(f"PRs included: {len(pr_by_number)}")
+          PY
+
+      - name: Create and push git tag
+        if: ${{ steps.rel.outputs.skip != 'true' }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.rel.outputs.next_tag }}"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. Skipping."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release (no contributors section)
+        if: ${{ steps.rel.outputs.skip != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.rel.outputs.next_tag }}"
+          gh release create "$TAG" \
+            --target main \
+            --title "GenAssist $TAG" \
+            --notes-file RELEASE_NOTES.md
