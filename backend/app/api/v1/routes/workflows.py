@@ -9,6 +9,7 @@ from app.modules.workflow.utils import generate_python_function_template
 from app.core.permissions.constants import Permissions as P
 from app.schemas.workflow import Workflow, WorkflowCreate, WorkflowUpdate
 from app.auth.dependencies import auth, permissions
+from app.services.llm_providers import LlmProviderService
 
 from app.services.workflow import WorkflowService
 from app.dependencies.injector import injector
@@ -52,6 +53,7 @@ SUPPORTED_NODE_TYPES = [
     "preprocessingNode",
     "trainModelNode",
     "mcpNode",
+    "workflowExecutorNode",
 ]
 
 
@@ -214,11 +216,10 @@ async def execute_workflow(
             "edges": workflow.edges,
         }
         thread_id = input_data.get("thread_id", str(uuid.uuid4()))
-        workflow_engine = WorkflowEngine.get_instance()
-        workflow_engine.build_workflow(workflow_config)
+        workflow_engine = WorkflowEngine(workflow_config)
 
         state = await workflow_engine.execute_from_node(
-            str(workflow_id), input_data=input_data, thread_id=thread_id
+            input_data=input_data, thread_id=thread_id
         )
 
         return state.format_state_as_response()
@@ -286,12 +287,11 @@ async def test_workflow(
             }
 
         # Use the new engine approach
-        workflow_engine = WorkflowEngine.get_instance()
-        workflow_engine.build_workflow(workflow_config)
+        workflow_engine = WorkflowEngine(workflow_config)
 
         thread_id = input_data.get("thread_id", str(uuid.uuid4()))
         state = await workflow_engine.execute_from_node(
-            workflow_config["id"], input_data=input_data, thread_id=thread_id
+            input_data=input_data, thread_id=thread_id
         )
 
         return state.format_state_as_response()
@@ -363,11 +363,10 @@ async def test_individual_node(test_data: Dict[str, Any]):
             "nodes": [{"id": test_id, "type": node_type, "data": node_config}],
             "edges": [],
         }
-        workflow_engine = WorkflowEngine.get_instance()
+        workflow_engine = WorkflowEngine(workflow_config)
 
-        # Build and execute the workflow
-        workflow_engine.build_workflow(workflow_config)
-        state = await workflow_engine.execute_from_node(test_id, input_data=input_data)
+        # Execute the workflow
+        state = await workflow_engine.execute_from_node(input_data=input_data)
 
         return state.format_state_as_response()
 
@@ -379,6 +378,8 @@ async def test_individual_node(test_data: Dict[str, Any]):
 @router.post("/generate-python-template", response_model=Dict[str, Any])
 async def generate_python_template(
     test_data: Dict[str, Any],
+    llm_provider_svc: LlmProviderService = Injected(LlmProviderService),
+    llm_provider: LLMProvider = Injected(LLMProvider),
 ):
     """
     Generate a Python function template based on a tool's parameter schema.
@@ -397,20 +398,12 @@ async def generate_python_template(
 
         if prompt:
             # Use LLM to modify the template with the extra logic
-            llm_provider = injector.get(LLMProvider)
             # Get the default model (first config or default)
-            configs = llm_provider.get_all_configurations()
-            if not configs:
-                raise HTTPException(
-                    status_code=500, detail="No LLM provider configuration found."
-                )
-            default_model_id = str(
-                next(
-                    (c for c in configs if getattr(
-                        c, "is_default", 0) == 1), configs[0]
-                ).id
-            )
-            llm = await llm_provider.get_model(default_model_id)
+            default_model = await llm_provider_svc.get_default()
+
+            # get the llm model
+            llm = await llm_provider.get_model(default_model.id)
+
             # Compose the LLM prompt
             llm_prompt = f"""
 You are an expert Python developer. You are given a Python function template below. 

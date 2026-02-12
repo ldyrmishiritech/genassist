@@ -6,13 +6,10 @@ TODO: Implement full S3 storage operations using boto3.
 
 import logging
 from typing import List, Dict, Any, Optional
-
 from app.core.utils.s3_utils import S3Client
-
 from ..base import BaseStorageProvider
 
 logger = logging.getLogger(__name__)
-
 
 class S3StorageProvider(BaseStorageProvider):
     """
@@ -23,6 +20,10 @@ class S3StorageProvider(BaseStorageProvider):
 
     name = "s3"
     provider_type = "s3"
+    aws_bucket_name: str
+    aws_access_key_id: Optional[str]
+    aws_secret_access_key: Optional[str]
+    aws_region_name: Optional[str]
 
     def __init__(self, config: Dict[str, Any]):
         """
@@ -32,10 +33,10 @@ class S3StorageProvider(BaseStorageProvider):
             config: Configuration dictionary containing S3 credentials and bucket
         """
         super().__init__(config)
-        self.aws_bucket_name = config.get("aws_bucket_name")
-        self.aws_access_key_id = config.get("aws_access_key_id")
-        self.aws_secret_access_key = config.get("aws_secret_access_key")
-        self.aws_region_name = config.get("aws_region_name", "us-east-1")
+        self.aws_bucket_name = config.get("AWS_BUCKET_NAME", "") 
+        self.aws_access_key_id = config.get("AWS_ACCESS_KEY_ID", None)
+        self.aws_secret_access_key = config.get("AWS_SECRET_ACCESS_KEY", None)
+        self.aws_region_name = config.get("AWS_REGION", None)
         
         # Initialize S3 client
         self.s3_client = S3Client(
@@ -47,43 +48,41 @@ class S3StorageProvider(BaseStorageProvider):
 
     async def initialize(self) -> bool:
         """Initialize the provider."""
-        # TODO: Implement S3 client initialization
-        logger.warning("S3StorageProvider is not yet implemented")
-        return False
+        self._initialized = True
+        return True
 
     def get_base_path(self) -> str:
-        """
-        Get the base path of the storage provider
-        
-        Returns:
-            Base path of the storage provider
-        """
+        """Get the base path of the storage provider."""
         return self.aws_bucket_name
 
     async def upload_file(
         self,
         file_content: bytes,
-        storage_path: str,
+        file_path: str,
         file_metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """Upload a file to S3."""
-        # TODO: Implement S3 file upload using boto3
-        raise NotImplementedError("S3StorageProvider.upload_file is not yet implemented")
+        self.s3_client.upload_content(file_content, self.aws_bucket_name, file_path)
+        return file_path
 
-    async def download_file(self, storage_path: str) -> bytes:
+    async def download_file(self, file_path: str) -> bytes:
         """Download a file from S3."""
-        # TODO: Implement S3 file download using boto3
-        raise NotImplementedError("S3StorageProvider.download_file is not yet implemented")
+        try:
+            return self.s3_client.get_file_content(file_path)
+        except Exception as e:
+            logger.error(f"Failed to download file {file_path}: {e}")
+            raise
 
-    async def delete_file(self, storage_path: str) -> bool:
+    async def delete_file(self, file_path: str) -> bool:
         """Delete a file from S3."""
-        # TODO: Implement S3 file deletion using boto3
-        raise NotImplementedError("S3StorageProvider.delete_file is not yet implemented")
+        return self.s3_client.delete_file(file_path)
 
-    async def file_exists(self, storage_path: str) -> bool:
+    async def file_exists(self, file_path: str) -> bool:
         """Check if a file exists in S3."""
-        # TODO: Implement S3 file existence check using boto3
-        raise NotImplementedError("S3StorageProvider.file_exists is not yet implemented")
+        try:
+            return self.s3_client.get_file_content(file_path) is not None
+        except Exception:
+            return False
 
     async def list_files(
         self,
@@ -91,7 +90,24 @@ class S3StorageProvider(BaseStorageProvider):
         limit: Optional[int] = None
     ) -> List[str]:
         """List files in S3 bucket."""
-        return self.s3_client.list_files(prefix=prefix, limit=limit)
+        result = self.s3_client.list_files(
+            prefix=prefix or "",
+            max_keys=limit or 1000,
+        )
+        return [f["key"] for f in result.get("files", [])]
+
+    async def get_file_url(self, bucket_name: str, file_path: str) -> str:
+        """Get the URL of a file in S3."""
+        signed_url_expires_in = 3600
+
+        # get the presigned url for the file
+        params = {
+            'Bucket': bucket_name,
+            'Key': file_path
+        }
+
+        # get the presigned url for the file
+        return self.s3_client.generate_presigned_url('get_object', params, signed_url_expires_in)
 
     def get_stats(self) -> Dict[str, Any]:
         """Get provider statistics."""

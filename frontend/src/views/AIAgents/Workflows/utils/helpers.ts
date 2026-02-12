@@ -223,9 +223,9 @@ export const extractDynamicVariables = (text: string): Set<string> => {
   // const atMatches = text.match(/@\w+/g) || [];
   // atMatches.forEach((v) => variables.add(v.slice(1)));
 
-  // Match {{variable}} format
-  const curlyMatches = text.match(/{{([^}]+)}}/g) || [];
-  curlyMatches.forEach((v) => variables.add(v.slice(2, -2).trim()));
+  // Match {{variable}} format (without spaces inside braces)
+  const curlyMatches = text.match(/{{([^\s{}]+)}}/g) || [];
+  curlyMatches.forEach((v) => variables.add(v.slice(2, -2)));
 
   return variables;
 };
@@ -525,4 +525,22 @@ export const valueToString = (value: unknown, type: SchemaType): string => {
   }
   
   return String(value);
+};
+
+/**
+ * Recursively truncates arrays to a maximum number of items.
+ * Objects are traversed recursively; primitives are left as-is.
+ */
+export const truncateNodeOutput = (data: unknown, maxItems: number = 4): unknown => {
+  if (Array.isArray(data)) {
+    return data.slice(0, maxItems).map((item) => truncateNodeOutput(item, maxItems));
+  }
+  if (data !== null && typeof data === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      result[key] = truncateNodeOutput(value, maxItems);
+    }
+    return result;
+  }
+  return data;
 };

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseStorageProvider
+from app.core.project_path import DATA_VOLUME
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,9 @@ class LocalFileSystemProvider(BaseStorageProvider):
     Files are stored in a base directory specified in configuration.
     """
 
-    name = "local"
-    provider_type = "local"
+    name: str = "local"
+    provider_type: str = "local"
+    tmp_folder: str = str(DATA_VOLUME)
 
     def __init__(self, config: Dict[str, Any]):
         """
@@ -32,7 +34,7 @@ class LocalFileSystemProvider(BaseStorageProvider):
             config: Configuration dictionary containing 'base_path' key
         """
         super().__init__(config)
-        self.base_path = Path(config.get("base_path", "/tmp/filemanager"))
+        self.base_path = Path(config.get("base_path", self.tmp_folder))
         self.base_path.mkdir(parents=True, exist_ok=True)
 
     async def initialize(self) -> bool:
@@ -60,34 +62,23 @@ class LocalFileSystemProvider(BaseStorageProvider):
         """
         return str(self.base_path)
 
-    def _resolve_path(self, storage_path: str) -> Path:
+    def _resolve_path(self, file_path: str) -> Path:
         """
         Resolve storage path to absolute file system path.
         
         Args:
-            storage_path: Storage path (relative to base_path)
+            file_path: File path (relative to base_path)
             
         Returns:
             Absolute Path object
         """
-        # Normalize path to prevent directory traversal
-        normalized_path = Path(storage_path).as_posix()
-        # Remove leading slashes and resolve
-        normalized_path = normalized_path.lstrip('/')
-        full_path = (self.base_path / normalized_path).resolve()
-        
-        # Ensure resolved path is within base_path
-        try:
-            full_path.relative_to(self.base_path.resolve())
-        except ValueError:
-            raise ValueError(f"Path {storage_path} is outside base_path {self.base_path}")
-        
-        return full_path
+        return (self.base_path / Path(file_path)).resolve()
+
 
     async def upload_file(
         self,
         file_content: bytes,
-        storage_path: str,
+        file_path: str,
         file_metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """
@@ -95,14 +86,14 @@ class LocalFileSystemProvider(BaseStorageProvider):
         
         Args:
             file_content: File content as bytes
-            storage_path: Path where the file should be stored
+            file_path: Path where the file should be stored
             file_metadata: Optional file metadata dictionary (not used for local storage)
             
         Returns:
-            Storage path where the file was stored
+            File path where the file was stored
         """
         try:
-            full_path = self._resolve_path(storage_path)
+            full_path = self._resolve_path(file_path)
             
             # Create parent directories if they don't exist
             full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -111,68 +102,67 @@ class LocalFileSystemProvider(BaseStorageProvider):
             full_path.write_bytes(file_content)
             
             logger.debug(f"Uploaded file to {full_path}")
-            return storage_path
+            return file_path
         except Exception as e:
-            logger.error(f"Failed to upload file {storage_path}: {e}")
+            logger.error(f"Failed to upload file {file_path}: {e}")
             raise
 
-    async def download_file(self, storage_path: str) -> bytes:
+    async def download_file(self, file_path: str) -> bytes:
         """
         Download a file from local file system.
         
         Args:
-            storage_path: Path to the file in storage
+            file_path: Path to the file in storage
             
         Returns:
             File content as bytes
         """
         try:
-            full_path = self._resolve_path(storage_path)
+            full_path = self._resolve_path(file_path)
             
             if not full_path.exists():
-                raise FileNotFoundError(f"File not found: {storage_path}")
+                raise FileNotFoundError(f"File not found: {file_path}")
             
             return full_path.read_bytes()
         except Exception as e:
-            logger.error(f"Failed to download file {storage_path}: {e}")
+            logger.error(f"Failed to download file {file_path}: {e}")
             raise
 
-    async def delete_file(self, storage_path: str) -> bool:
+    async def delete_file(self, file_path: str) -> bool:
         """
         Delete a file from local file system.
         
         Args:
-            storage_path: Path to the file in storage
+            file_path: Path to the file in storage
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            full_path = self._resolve_path(storage_path)
+            full_path = self._resolve_path(file_path)
             
             if full_path.exists() and full_path.is_file():
                 full_path.unlink()
                 logger.debug(f"Deleted file {full_path}")
                 return True
             else:
-                logger.warning(f"File not found or not a file: {storage_path}")
+                logger.warning(f"File not found or not a file: {file_path}")
                 return False
         except Exception as e:
-            logger.error(f"Failed to delete file {storage_path}: {e}")
+            logger.error(f"Failed to delete file {file_path}: {e}")
             return False
 
-    async def file_exists(self, storage_path: str) -> bool:
+    async def file_exists(self, file_path: str) -> bool:
         """
         Check if a file exists in local file system.
         
         Args:
-            storage_path: Path to the file in storage
-            
+            file_path: Path to the file in storage
         Returns:
             True if file exists, False otherwise
         """
         try:
-            full_path = self._resolve_path(storage_path)
+            full_path = self._resolve_path(file_path)
             return full_path.exists() and full_path.is_file()
         except Exception:
             return False
@@ -318,3 +308,19 @@ class LocalFileSystemProvider(BaseStorageProvider):
     def close(self):
         """Clean up resources (no-op for local file system)."""
         pass
+
+    async def get_file_url(self, storage_path: str, file_path: str) -> str:
+        """
+        Get the URL of a file in local file system.
+        
+        This method is asynchronous to comply with the BaseStorageProvider
+        interface and to allow uniform ``await`` usage across providers.
+        
+        Args:
+            storage_path: Path to the file
+            file_path: File path of the file
+            
+        Returns:
+            URL of the file
+        """
+        return f"{storage_path}/{file_path}"

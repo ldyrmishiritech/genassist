@@ -145,7 +145,7 @@ posthog==4.2.0
 prometheus_client==0.22.0
 prompt_toolkit==3.0.51
 propcache==0.3.1
-protobuf==6.33.4
+protobuf==6.33.5
 psycopg2-binary==2.9.10
 pyasn1==0.6.2
 pyasn1_modules==0.4.2
@@ -236,3 +236,4 @@ google-cloud-speech>=2.34.0
 google-cloud-storage>=3.5.0
 google-cloud-recaptcha-enterprise==1.30.0
 mcp>=1.0.0
+aioodbc==0.5.0

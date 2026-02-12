@@ -20,23 +20,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# 3. Install Requirements (Aggressive Cleanup Mode)
+# 3. Install Requirements (Optimized for CPU-only)
 COPY requirements-main.txt .
 COPY requirements-rag.txt .
 COPY requirements-app.txt .
 
-RUN pip install --upgrade pip setuptools wheel && \
-    # A. Install everything normally (might pull heavy GPU versions)
-    pip install --no-cache-dir \
+# Install CPU-only PyTorch FIRST to prevent GPU version downloads
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip setuptools wheel && \
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    pip install \
     -r requirements-main.txt \
     -r requirements-rag.txt \
     -r requirements-app.txt \
-    --extra-index-url https://download.pytorch.org/whl/cpu && \
-    # B. Uninstall Torch and NVIDIA bloat
-    pip uninstall -y torch torchvision torchaudio && \
-    pip freeze | grep nvidia | cut -d= -f1 | xargs -r pip uninstall -y && \
-    # C. Re-install strictly CPU-only versions
-    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+    --extra-index-url https://download.pytorch.org/whl/cpu
 
 # ==========================================
 # Stage 2: Runtime (Minimal & Secure)
@@ -56,9 +53,19 @@ RUN apt-get update && \
     libmagic1 \
     antiword \
     curl \
+    gnupg \
     libpq5 \
     libxml2 \
+    unixodbc \
+    unixodbc-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# 2. Install Microsoft ODBC Driver 18 for SQL Server (supports both amd64 and arm64)
+RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg && \
+    echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update && \
+    ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 && \
+    rm -rf /var/lib/apt/lists/*
 
 # 2. Configure Environment & User
 ENV PATH="/opt/venv/bin:$PATH" \

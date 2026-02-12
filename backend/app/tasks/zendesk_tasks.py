@@ -97,9 +97,7 @@ async def process_zendesk_tickets():
             )
             conversation_id = str(saved_conversation.id)
             conversation_analysis = (
-                await conversation_service.finalize_in_progress_conversation(
-                    None, saved_conversation.id
-                )
+                await conversation_service.finalize_in_progress_conversation(conversation_id=saved_conversation.id)
             )
 
             # UPDATE Zendesk
@@ -166,5 +164,5 @@ async def process_zendesk_tickets():
         "timestamp": utc_now().isoformat(),
     }
 
-    logger.info(f"Zendesk ticket analysis completed: {result}")
+    logger.debug(f"Zendesk ticket analysis completed: {result}")
     return result
