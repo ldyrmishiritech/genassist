@@ -23,6 +23,8 @@ class AgentBase(BaseModel):
                                            description="Welcome image blob displayed when starting a conversation with an agent.")
     welcome_title: Optional[str] = Field(None, max_length=200,
                                          description="Welcome title displayed when starting a conversation with an agent.")
+    input_disclaimer_html: Optional[str] = Field(None,
+                                                  description="HTML disclaimer shown below the chat input. Supports text, bold, font-size, and links.")
     possible_queries: list[str] = Field(...,
                                         description="Possible queries, suggested when starting a conversation with an agent.")
     thinking_phrases: Optional[list[str]] = Field(
@@ -49,17 +51,18 @@ class AgentUpdate(BaseModel):
     welcome_message: Optional[str] = None
     welcome_image: Optional[bytes] = None
     welcome_title: Optional[str] = None
+    input_disclaimer_html: Optional[str] = None
     possible_queries: Optional[list[str]] = None
     thinking_phrases: Optional[list[str]] = None
     thinking_phrase_delay: Optional[int] = None
     workflow_id: Optional[UUID] = None
     security_settings: Optional[AgentSecuritySettingsUpdate] = None
-    model_config = ConfigDict(extra='forbid', from_attributes=True)
+
+    model_config = ConfigDict(extra='ignore', from_attributes=True)
 
 
 class AgentRead(AgentBase):
     id: UUID
-    model_config = ConfigDict(extra='ignore')  # shared rules
     user_id: Optional[UUID] = None
     operator_id: UUID
     operator: Optional[OperatorReadMinimal] = None
@@ -71,6 +74,8 @@ class AgentRead(AgentBase):
     welcome_image: Optional[bytes] = Field(None, exclude=True)
     # Flag to indicate if agent has a welcome image (avoids unnecessary fetch)
     has_welcome_image: bool = False
+
+    model_config = ConfigDict(extra='ignore')  # shared rules
 
     @model_validator(mode='before')
     @classmethod

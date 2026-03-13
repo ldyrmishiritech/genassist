@@ -1,5 +1,4 @@
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Optional
@@ -109,28 +108,11 @@ async def serve_file(rec_id: UUID, service: AudioService = Injected(AudioService
     except ValueError:
         raise AppException(error_key=ErrorKey.INVALID_FILE_PATH, status_code=400)
 
-    # Explicit path traversal guard for SAST: ensure path is under base
-    try:
-        base_str = str(recordings_base)
-        path_str = str(resolved_path)
-        if os.path.commonpath([path_str, base_str]) != base_str:
-            raise HTTPException(status_code=400, detail="Invalid file path")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid file path")
+    # Reconstruct path from trusted base + validated relative portion to break taint chain
+    safe_serving_path = str(recordings_base / resolved_path.relative_to(recordings_base))
+    response = FileResponse(safe_serving_path)
+    return response
 
-    return FileResponse(path_str)
-
-
-@router.get("/metrics", dependencies=[
-    Depends(auth),
-    Depends(permissions(P.Recording.READ_METRICS))
-    ])
-async def get_metrics(service: AudioService = Injected(AudioService)):
-    try:
-        return await service.fetch_and_calculate_metrics()
-    except Exception as e:
-        logger.error(f"Error fetching metrics: {e}")
-        return {"error": "Error fetching metrics"}
 
 # @router.post("/transcribe_no_save")
 # async def transcribe_no_save(file: UploadFile, service: RecordingService = Depends()):

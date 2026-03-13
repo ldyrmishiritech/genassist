@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AgentListItem } from "@/interfaces/ai-agent.interface";
+import { AgentListItem, AgentConfig } from "@/interfaces/ai-agent.interface";
 import { Button } from "@/components/button";
 import {
   Plus,
@@ -12,6 +12,7 @@ import {
   KeyRoundIcon,
   Shield,
   Loader2,
+  Workflow,
 } from "lucide-react";
 import { Switch } from "@/components/switch";
 import {
@@ -23,6 +24,8 @@ import {
 } from "@/components/dropdown-menu";
 import { AgentFormDialog } from "./AgentForm";
 import { SearchInput } from "@/components/SearchInput";
+import { getAgentConfig } from "@/services/api";
+import { toast } from "react-hot-toast";
 
 interface AgentListProps {
   agents: AgentListItem[];
@@ -71,17 +74,72 @@ const AgentList: React.FC<AgentListProps> = ({
     return () => observer.disconnect();
   }, [hasMore, loadingMore, loadMore]);
 
-  const activeAgents = agents.filter((agent) => agent.is_active);
-  const inactiveAgents = agents.filter((agent) => !agent.is_active);
-  const filteredAgents = agents.filter((agent) => {
-    const agentName = agent.name;
-    return agentName.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  const activeCount = useMemo(() => agents.filter((a) => a.is_active).length, [agents]);
+  const inactiveCount = useMemo(() => agents.length - activeCount, [agents, activeCount]);
+  const filteredAgents = useMemo(
+    () =>
+      agents.filter((agent) =>
+        agent.name.toLowerCase().includes(searchTerm.toLowerCase())
+      ),
+    [agents, searchTerm]
+  );
 
   const [openAgentForm, setOpenAgentForm] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [settingsFormData, setSettingsFormData] = useState<{
+    id: string;
+    name: string;
+    description: string;
+    welcome_message?: string;
+    welcome_title?: string;
+    input_disclaimer_html?: string;
+    thinking_phrase_delay?: number;
+    possible_queries?: string[];
+    thinking_phrases?: string[];
+    is_active?: boolean;
+    workflow_id?: string;
+    has_welcome_image?: boolean;
+  } | null>(null);
+  const [settingsLoadingAgentId, setSettingsLoadingAgentId] = useState<string | null>(null);
 
   const handleOpenWorkflow = (agentId: string) => {
     navigate(`/ai-agents/workflow/${agentId}`);
+  };
+
+  const handleOpenAgentSettings = async (agentId: string) => {
+    setSettingsLoadingAgentId(agentId);
+    try {
+      const config: AgentConfig = await getAgentConfig(agentId);
+      const formData = {
+        id: config.id,
+        name: config.name,
+        description: config.description ?? "",
+        welcome_message: config.welcome_message ?? "",
+        welcome_title: config.welcome_title ?? "",
+        input_disclaimer_html: config.input_disclaimer_html ?? "",
+        thinking_phrase_delay: config.thinking_phrase_delay ?? 0,
+        possible_queries: config.possible_queries ?? [],
+        thinking_phrases: config.thinking_phrases ?? [],
+        is_active: config.is_active,
+        // workflow_id: config.workflow_id,
+        // has_welcome_image: (config as { has_welcome_image?: boolean }).has_welcome_image,
+      };
+      setSettingsFormData(formData);
+      // Defer opening so the dropdown fully closes first; avoids Radix
+      // interpreting the dropdown close as an outside click that closes the Sheet
+      setSettingsDialogOpen(true);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load agent settings"
+      );
+    } finally {
+      setSettingsLoadingAgentId(null);
+    }
+  };
+
+  const handleSettingsDialogClose = () => {
+    setSettingsDialogOpen(false);
+    setSettingsFormData(null);
   };
 
   if (!agents || agents.length === 0) {
@@ -114,11 +172,15 @@ const AgentList: React.FC<AgentListProps> = ({
     const agentName = agent.name;
     const isActive = !!agent.is_active;
     const truncatedPrompt = agent.possible_queries?.join(" ") ?? "";
+    const isAgentModalOpen =
+      settingsDialogOpen && settingsFormData?.id === agent.id;
 
     return (
       <div
         key={agent.id}
-        className={`px-6 py-4 hover:bg-muted/50 cursor-pointer`}
+        className={`px-6 py-4 hover:bg-muted/50 cursor-pointer ${
+          settingsDialogOpen && !isAgentModalOpen ? "blur-sm opacity-50 bg-muted/100" : ""
+        }`}
         onClick={() => {
           handleOpenWorkflow(agent.id);
         }}
@@ -165,8 +227,8 @@ const AgentList: React.FC<AgentListProps> = ({
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem asChild>
                     <Link to={`/ai-agents/workflow/${agent.id}`}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      <span>Edit</span>
+                      <Workflow className="mr-2 h-4 w-4" />
+                      <span>Edit Workflow</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem
@@ -191,6 +253,21 @@ const AgentList: React.FC<AgentListProps> = ({
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleOpenAgentSettings(agent.id);
+                    }}
+                    disabled={settingsLoadingAgentId === agent.id}
+                  >
+                    {settingsLoadingAgentId === agent.id ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Pencil className="mr-2 h-4 w-4" />
+                    )}
+                    <span>Edit Agent</span>
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
                     onClick={() => onDelete(agent.id)}
@@ -218,7 +295,7 @@ const AgentList: React.FC<AgentListProps> = ({
         <div>
           <h2 className="text-3xl font-bold">
             Agent Studio{" "}
-            <span className="text-2xl text-zinc-400 font-normal">({activeAgents.length} Active, {inactiveAgents.length} Inactive)</span>
+            <span className="text-2xl text-zinc-400 font-normal">({activeCount} Active, {inactiveCount} Inactive)</span>
           </h2>
           <p className="text-zinc-400 font-normal">View and manage workflows</p>
         </div>
@@ -259,6 +336,14 @@ const AgentList: React.FC<AgentListProps> = ({
         isOpen={openAgentForm}
         onClose={handleFormClose}
         data={null}
+      />
+      <AgentFormDialog
+        isOpen={settingsDialogOpen}
+        onClose={handleSettingsDialogClose}
+        data={settingsFormData}
+        redirectOnCreate={false}
+        onCreated={() => handleSettingsDialogClose()}
+        onSaved={() => onRefresh()}
       />
     </div>
   );

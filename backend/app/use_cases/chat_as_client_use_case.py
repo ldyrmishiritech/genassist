@@ -20,11 +20,13 @@ from app.db.models.conversation import ConversationModel
 from app.services.agent_config import AgentConfigService
 from app.services.conversations import ConversationService
 from app.services.agent_response_log import AgentResponseLogService
+from app.services.analytics_realtime import update_stats_incrementally
 from app.db.base import generate_sequential_uuid
 from app.services.file_manager import FileManagerService
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 # send message to the socket
 async def send_message_to_socket(
@@ -115,21 +117,34 @@ async def process_conversation_update_with_agent(
             metadata=model.metadata,
         )
 
-        agent_answer = agent_response.get("response", "No answer found")
-
         # Set formatted agent message in transcript
         now = datetime.now(timezone.utc)
-
         elapsed_seconds = (now - conversation.created_at).total_seconds()
 
-        transcript_object = TranscriptSegmentInput(
-            id=generate_sequential_uuid(),  # Generate ID upfront
-            create_time=now,
-            start_time=elapsed_seconds,
-            end_time=elapsed_seconds,
-            speaker="agent",
-            text=str(agent_answer),
-        )
+        if agent_response.get("status") == "awaiting_input":
+            # Workflow requesting user input — send form schema as form_request
+            response_output = agent_response.get("response", {})
+            form_schema = response_output.get("form_schema", {}) if isinstance(response_output, dict) else {}
+            transcript_object = TranscriptSegmentInput(
+                id=generate_sequential_uuid(),
+                create_time=now,
+                start_time=elapsed_seconds,
+                end_time=elapsed_seconds,
+                speaker="agent",
+                text=json.dumps(form_schema),
+                type="form_request",
+            )
+        else:
+            # Normal agent response
+            agent_answer = agent_response.get("response", "No answer found")
+            transcript_object = TranscriptSegmentInput(
+                id=generate_sequential_uuid(),
+                create_time=now,
+                start_time=elapsed_seconds,
+                end_time=elapsed_seconds,
+                speaker="agent",
+                text=str(agent_answer),
+            )
 
         model.messages.append(transcript_object)
 
@@ -167,6 +182,10 @@ async def process_conversation_update_with_agent(
                     conversation_id=updated_conversation.id,
                     transcript_message_id=last_message.id,
                     agent_response=agent_response,
+                )
+                # Fire incremental analytics update in background
+                _ = asyncio.create_task(
+                    update_stats_incrementally(agent_response)
                 )
         except Exception as e:
             logger.warning(f"Failed to persist AgentResponseLog after update: {e}")

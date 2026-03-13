@@ -1,19 +1,22 @@
 import json
 import logging
-from typing import List
+from typing import List, Optional
+from uuid import UUID
 
+from injector import inject
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.core.exceptions.exception_classes import AppException
 from app.core.exceptions.error_messages import ErrorKey
 from app.core.utils.enums.conversation_topic_enum import ConversationTopic
 from app.core.utils.enums.negative_conversation_reason import NegativeConversationReason
-from app.core.utils.gpt_utils import check_and_raise_if_non_retryable
+from app.core.utils.gpt_utils import clean_markdown, check_and_raise_if_non_retryable
 from app.modules.workflow.llm.provider import LLMProvider
 from app.schemas.conversation_analysis import AnalysisResult
 from app.schemas.conversation_transcript import TranscriptSegment
 from app.schemas.llm import LlmAnalyst
 from app.core.utils.bi_utils import clean_gpt_json_response
+from app.services.agent_response_log import AgentResponseLogService
 
 
 logger = logging.getLogger(__name__)
@@ -26,6 +29,7 @@ class GptKpiAnalyzer:
         transcript: str,
         llm_analyst: LlmAnalyst,
         max_attempts=3,
+        conversation_id: Optional[UUID] = None,
     ) -> AnalysisResult:
         """Analyze transcript using ChatGPT (LangChain) with retry on failure."""
 
@@ -33,6 +37,7 @@ class GptKpiAnalyzer:
 
         llm_provider = injector.get(LLMProvider)
         llm = await llm_provider.get_model(llm_analyst.llm_provider_id)
+        agent_logs_service = injector.get(AgentResponseLogService)
 
         if (
             transcript is None
@@ -48,17 +53,23 @@ class GptKpiAnalyzer:
         last_response = ""
         user_prompt = ""
 
+        system_msg = SystemMessage(content=self._build_system_prompt(llm_analyst.prompt))
+
+        enrichment_context = await agent_logs_service.build_enrichment_context(
+            conversation_id, llm_analyst.context_enrichments or []
+        )
+
         for attempt in range(1, max_attempts + 1):
             try:
                 # Modify prompt on retry attempts
                 if attempt == 1:
-                    user_prompt = self._create_user_prompt(transcript)
+                    user_prompt = self._create_user_prompt(transcript, enrichment_context=enrichment_context)
                 else:
                     user_prompt = self._create_user_prompt(
-                        transcript, error_hint=last_error_msg, attempt=attempt
+                        transcript, enrichment_context=enrichment_context,
+                        error_hint=last_error_msg, attempt=attempt
                     )
 
-                system_msg = SystemMessage(content=llm_analyst.prompt)
                 user_msg = HumanMessage(content=user_prompt)
 
                 response = await llm.ainvoke([system_msg, user_msg])
@@ -68,13 +79,11 @@ class GptKpiAnalyzer:
                 summary_data = self._extract_summary_and_title(response_text)
                 summary = summary_data.get("summary")
                 title = summary_data.get("title")
-                customer_speaker = summary_data.get("customer_speaker")
                 metrics = self._extract_metrics(response_text)
 
                 if (
                     summary
                     and title
-                    and customer_speaker
                     and isinstance(metrics, dict)
                     and metrics
                 ):
@@ -82,7 +91,6 @@ class GptKpiAnalyzer:
                         summary=summary,
                         title=title,
                         kpi_metrics=metrics,
-                        customer_speaker=customer_speaker,
                     )
 
                 raise AppException(ErrorKey.TRANSCRIPT_PARSE_ERROR)
@@ -113,75 +121,85 @@ class GptKpiAnalyzer:
             for seg in segments
         )
 
+    def _build_system_prompt(self, base_prompt: str) -> str:
+        """Combine the tenant-configured base prompt with the fixed analysis format instructions."""
+        return f"""{base_prompt}
+
+You are a customer experience expert specializing in call center analysis.
+
+Always respond in exactly this format:
+
+**A) Title:** <one from: {ConversationTopic.as_csv()}>
+
+**B) Summary:**
+- Operator performance assessment
+- Customer satisfaction
+- Key improvement points
+
+**C) KPI Metrics, Tone, and Sentiment Analysis (JSON Format):**
+Provide the following KPI metrics, overall tone, and sentiment percentages as a JSON object:
+
+```json
+{{
+    "Response Time": (integer 0-10),
+    "Customer Satisfaction": (integer 0-10),
+    "Quality of Service": (integer 0-10),
+    "Efficiency": (integer 0-10),
+    "Resolution Rate": (integer 0-10),
+    "Operator Knowledge": (integer 0-10),
+    "Tone": "(choose one from: Hostile, Frustrated, Friendly, Polite, Neutral, Professional)",
+    "Sentiment": {{
+        "positive": (float between 0-100),
+        "neutral": (float between 0-100),
+        "negative": (float between 0-100)
+    }}
+}}
+```
+
+The JSON metrics should be integers between 0 and 10, Tone must be one of the listed values, and sentiment percentages must sum up to 100%."""
+
     def _create_user_prompt(
-        self, transcript_text: str, error_hint: str = None, attempt: int = 1
+        self, transcript_text: str, enrichment_context: str = "",
+        error_hint: str = None, attempt: int = 1
     ) -> str:
-        """Create the analysis prompt for ChatGPT, optionally appending retry hints."""
+        """Create the user message for ChatGPT, optionally prepending enrichment context and retry hints."""
+        context_block = f"Additional Context:\n{enrichment_context}\n\n" if enrichment_context else ""
         retry_instruction = ""
         if error_hint and attempt > 1:
             retry_instruction = f"""
-            **Note:** This is attempt #{attempt}. The previous attempt failed with the following error:
-            "{error_hint}"
+**Note:** This is attempt #{attempt}. The previous attempt failed with the following error:
+"{error_hint}"
 
-            Please make sure your response strictly follows the requested format and especially corrects the issue that might have caused that error.
-            """
+Please make sure your response strictly follows the requested format and especially corrects the issue that might have caused that error.
+"""
 
-        return f"""
-            You are a customer experience expert. Please analyze this call center conversation transcript and provide 
-            your response in the following format:
+        return f"""{context_block}Analyze this transcript:
 
-            **A) Title:**
-            - Select the most appropriate title from the following list: {ConversationTopic.as_csv()}
+{transcript_text}
 
-            **B) Summary:**
-            - Assess the operator's performance and whether the customer was satisfied
-            - Identify key points of improvement
-
-            **C) KPI Metrics, Tone, and Sentiment Analysis (JSON Format):**
-            Provide the following KPI metrics, overall tone, and sentiment percentages as a JSON object:
-
-            ```json
-            {{
-                "Response Time": (integer 0-10),
-                "Customer Satisfaction": (integer 0-10),
-                "Quality of Service": (integer 0-10),
-                "Efficiency": (integer 0-10),
-                "Resolution Rate": (integer 0-10),
-                "Operator Knowledge": (integer 0-10),
-                "Tone": "(choose one from: Hostile, Frustrated, Friendly, Polite, Neutral, Professional)",
-                "Sentiment": {{
-                    "positive": (float between 0-100),
-                    "neutral": (float between 0-100),
-                    "negative": (float between 0-100)
-                }}
-            }}
-            ```
-
-            Transcript:
-            {transcript_text}
-
-            Remember to maintain the exact format specified above. The JSON metrics should be integers between 0 and 10, 
-            Tone must be one of the listed values, and sentiment percentages must sum up to 100%.
-
-            {retry_instruction}
-        """
+{retry_instruction}"""
 
     async def partial_hostility_analysis(
         self,
         transcript_segments: str,
         llm_analyst: LlmAnalyst,
+        conversation_id: Optional[UUID] = None,
     ) -> dict:
 
         from app.dependencies.injector import injector
 
         llm_provider = injector.get(LLMProvider)
         llm = await llm_provider.get_model(llm_analyst.llm_provider_id)
+        agent_logs_service = injector.get(AgentResponseLogService)
 
-        # Create a short prompt for hostility detection
-        # We'll ask for a JSON response with "sentiment" and "hostile_score"
         system_msg = SystemMessage(content=llm_analyst.prompt)
 
-        user_prompt = f"""
+        enrichment_context = await agent_logs_service.build_enrichment_context(
+            conversation_id, llm_analyst.context_enrichments or []
+        )
+        context_block = f"Additional Context:\n{enrichment_context}\n\n" if enrichment_context else ""
+
+        user_prompt = f"""{context_block}
         You are an impartial conversation analyst.
 
         Task:
@@ -267,28 +285,64 @@ class GptKpiAnalyzer:
             # Fallback to a safe default or re-raise
             return {"topic": "Other", "hostile_score": 0, "negative_reason": "Other"}
 
+
     def _extract_summary_and_title(self, text: str) -> dict:
-        """Extract the title, summary, and customer speaker section from the response."""
+        # Try JSON format first (Nova)
+        try:
+            cleaned = clean_gpt_json_response(text)
+            data = json.loads(cleaned)
+
+            title = clean_markdown(data.get("A) Title", ""))
+
+            summary_raw = data.get("B) Summary", "")
+            if isinstance(summary_raw, dict):
+                parts = []
+                for k, v in summary_raw.items():
+                    if isinstance(v, list):
+                        parts.append(f"{k}:\n" + "\n".join(f"- {item}" for item in v))
+                    else:
+                        parts.append(f"{k}: {v}")
+                summary = clean_markdown("\n".join(parts))
+            else:
+                summary = clean_markdown(str(summary_raw))
+
+            if title and summary:
+                return {"title": title, "summary": summary}
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+        # Fall back to markdown format (OpenAI)
         title_start = text.find("**A) Title:**")
         summary_start = text.find("**B) Summary:**")
-        customer_start = text.find("**C) Identify the Customer:**")
-        kpi_start = text.find("**D) KPI Metrics")
+        kpi_start = text.find("**C) KPI Metrics")
 
-        raw_title = text[title_start + 13 : summary_start].strip()
-        title = raw_title.lstrip("- ").strip()
-        summary = text[summary_start + 15 : customer_start].strip()
-        customer_speaker = text[customer_start + 32 : kpi_start].strip()
-        return {
-            "title": title,
-            "summary": summary,
-            "customer_speaker": customer_speaker,
-        }
+        raw_title = text[title_start + 13: summary_start].strip()
+        title = clean_markdown(raw_title.lstrip("- "))
+        summary = clean_markdown(text[summary_start + 15: kpi_start])
+
+        return {"title": title, "summary": summary}
+
 
     def _extract_metrics(self, text: str) -> dict:
-        """Extract and parse the KPI metrics JSON from the response."""
+        """Extract KPI metrics — supports both markdown (OpenAI) and JSON (Nova) responses."""
+        # Try full JSON format first (Nova)
+        try:
+            cleaned = clean_gpt_json_response(text)
+            data = json.loads(cleaned)
+            for key in data:
+                if key.startswith("C)") and isinstance(data[key], dict):
+                    return data[key]
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+        # Fall back to extracting embedded JSON block (OpenAI)
         json_start = text.find("{")
         json_end = text.rfind("}") + 1
-        if json_start != -1 and json_end != -1:
-            metrics_json = text[json_start:json_end]
-            return json.loads(metrics_json)
+        if json_start != -1 and json_end > json_start:
+            try:
+                return json.loads(text[json_start:json_end])
+            except json.JSONDecodeError:
+                logger.warning("_extract_metrics: Failed to parse embedded JSON block.")
+
         return {}
+

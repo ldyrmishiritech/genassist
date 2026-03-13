@@ -8,6 +8,8 @@ import Index from "@/views/Index";
 import Transcripts from "./views/Transcripts";
 import Operators from "./views/Operators";
 import Analytics from "@/views/Analytics";
+import AgentPerformancePage from "@/views/Analytics/pages/AgentPerformancePage";
+import NodeAnalyticsPage from "@/views/Analytics/pages/NodeAnalyticsPage";
 import Notifications from "@/views/Notifications";
 import Settings from "./views/Settings";
 import NotFound from "@/views/NotFound";
@@ -30,6 +32,8 @@ import KnowledgeBase from "@/views/KnowledgeBase/Index";
 import MLModels from "@/views/MLModels/Index";
 import MLModelDetail from "@/views/MLModels/components/MLModelDetail";
 import { FeatureFlags } from "./views/Settings/pages/FeatureFlags";
+import { Translations } from "./views/Settings/pages/Translations";
+import { Languages } from "./views/Settings/pages/Languages";
 import { useFeatureFlag } from "./context/FeatureFlagContext";
 import { GlobalChat } from "./components/GlobalChat";
 import ServerDownPage from "@/components/ServerDownPage";
@@ -111,7 +115,6 @@ export const RoutesProvider = () => {
               path: "dashboard",
               element: <Index />,
             },
-            
             {
               path: "transcripts",
               element: (
@@ -139,6 +142,22 @@ export const RoutesProvider = () => {
               ),
             },
             {
+              path: "analytics/agent-performance",
+              element: (
+                <ProtectedRoute requiredPermissions={["read:dashboard"]}>
+                  <AgentPerformancePage />
+                </ProtectedRoute>
+              ),
+            },
+            {
+              path: "analytics/node-analytics",
+              element: (
+                <ProtectedRoute requiredPermissions={["read:dashboard"]}>
+                  <NodeAnalyticsPage />
+                </ProtectedRoute>
+              ),
+            },
+            {
               path: "notifications",
               element: <Notifications />,
             },
@@ -151,6 +170,22 @@ export const RoutesProvider = () => {
               element: (
                 <ProtectedRoute requiredPermissions={["read:feature_flag"]}>
                   <FeatureFlags />
+                </ProtectedRoute>
+              ),
+            },
+            {
+              path: "settings/translations",
+              element: (
+                <ProtectedRoute requiredPermissions={["read:app_setting"]}>
+                  <Translations />
+                </ProtectedRoute>
+              ),
+            },
+            {
+              path: "settings/languages",
+              element: (
+                <ProtectedRoute requiredPermissions={["read:app_setting"]}>
+                  <Languages />
                 </ProtectedRoute>
               ),
             },
@@ -189,7 +224,7 @@ export const RoutesProvider = () => {
             {
               path: "fine-tune",
               element: (
-                <ProtectedRoute requiredPermissions={["*"]}>
+                <ProtectedRoute requiredPermissions={["*", "update:llm_provider"]}>
                   <FineTune />
                 </ProtectedRoute>
               ),
@@ -197,7 +232,7 @@ export const RoutesProvider = () => {
             {
               path: "fine-tune/:id",
               element: (
-                <ProtectedRoute requiredPermissions={["*"]}>
+                <ProtectedRoute requiredPermissions={["*", "update:llm_provider"]}>
                   <FineTuneJobDetail />
                 </ProtectedRoute>
               ),
@@ -237,7 +272,7 @@ export const RoutesProvider = () => {
             {
               path: "tools",
               element: (
-                <ProtectedRoute requiredPermissions={["*"]}>
+                <ProtectedRoute requiredPermissions={["*", "update:app_settings"]}>
                   <Tools />
                 </ProtectedRoute>
               ),
@@ -245,7 +280,7 @@ export const RoutesProvider = () => {
             {
               path: "tools/create",
               element: (
-                <ProtectedRoute requiredPermissions={["*"]}>
+                <ProtectedRoute requiredPermissions={["*", "update:app_settings"]}>
                   <CreateTool />
                 </ProtectedRoute>
               ),
@@ -253,7 +288,7 @@ export const RoutesProvider = () => {
             {
               path: "tools/edit/:id",
               element: (
-                <ProtectedRoute requiredPermissions={["*"]}>
+                <ProtectedRoute requiredPermissions={["*", "update:app_settings"]}>
                   <CreateTool />
                 </ProtectedRoute>
               ),
@@ -277,7 +312,7 @@ export const RoutesProvider = () => {
             {
               path: "knowledge-base",
               element: (
-                <ProtectedRoute requiredPermissions={["*"]}>
+                <ProtectedRoute requiredPermissions={["*", "update:knowledge_base"]}>
                   <KnowledgeBase />
                 </ProtectedRoute>
               ),
@@ -285,7 +320,7 @@ export const RoutesProvider = () => {
             {
               path: "ml-models",
               element: (
-                <ProtectedRoute requiredPermissions={["*"]}>
+                <ProtectedRoute requiredPermissions={["*", "update:ml_model"]}>
                   <MLModels />
                 </ProtectedRoute>
               ),
@@ -293,7 +328,7 @@ export const RoutesProvider = () => {
             {
               path: "ml-models/:id",
               element: (
-                <ProtectedRoute requiredPermissions={["*"]}>
+                <ProtectedRoute requiredPermissions={["*", "update:ml_model"]}>
                   <MLModelDetail />
                 </ProtectedRoute>
               ),

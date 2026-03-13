@@ -134,6 +134,8 @@ class ErrorKey(Enum):
     LLM_INVALID_API_KEY = "LLM_INVALID_API_KEY"
     LLM_AUTHENTICATION_FAILED = "LLM_AUTHENTICATION_FAILED"
     FILE_MANAGER_INITIALIZATION_FAILED = "FILE_MANAGER_INITIALIZATION_FAILED"
+    TRANSLATION_ALREADY_EXISTS = "TRANSLATION_ALREADY_EXISTS"
+    LANGUAGE_ALREADY_EXISTS = "LANGUAGE_ALREADY_EXISTS"
 
 ERROR_MESSAGES = {
     'en': {
@@ -154,7 +156,7 @@ ERROR_MESSAGES = {
         ErrorKey.USERNAME_ALREADY_EXISTS: "Username already exists.",
         ErrorKey.USER_NOT_FOUND: "User not found.",
         ErrorKey.OPERATOR_NOT_FOUND: "Operator not found.",
-        ErrorKey.TRANSCRIPT_PARSE_ERROR: "There was an error parsing the transcript.",
+        ErrorKey.TRANSCRIPT_PARSE_ERROR: "There was an error parsing the transcript. Summary, title or metrics may be missing.",
         ErrorKey.INVALID_USERNAME_OR_PASSWORD: "Invalid username or password.",
         ErrorKey.INSUFFICIENT_PERMISSIONS: "Insufficient permissions for this action.",
         ErrorKey.API_KEY_MISSING: "Api key is required.",
@@ -260,6 +262,8 @@ ERROR_MESSAGES = {
         ErrorKey.LLM_INVALID_API_KEY: "Invalid API key for the LLM provider.",
         ErrorKey.LLM_AUTHENTICATION_FAILED: "Authentication failed with the LLM provider. Please check your credentials.",
         ErrorKey.FILE_MANAGER_INITIALIZATION_FAILED: "Failed to initialize file manager service.",
+        ErrorKey.TRANSLATION_ALREADY_EXISTS: "A translation with this key already exists.",
+        ErrorKey.LANGUAGE_ALREADY_EXISTS: "A language with this code already exists.",
 },
     'fr': {
         ErrorKey.INTERNAL_ERROR: 'Une erreur interne du serveur est survenue. Veuillez réessayer plus tard.',
