@@ -3,7 +3,7 @@ from typing import Awaitable, Callable, Optional
 from urllib.parse import parse_qs
 from uuid import UUID
 
-from fastapi import Depends, Query, Request, WebSocket, WebSocketException, status
+from fastapi import Depends, Header, Query, Request, WebSocket, WebSocketException, status
 from fastapi_injector import Injected
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from starlette_context import context
@@ -83,7 +83,8 @@ def permissions(*permissions: str) -> Callable[[Request], Awaitable[None]]:
 
         elif hasattr(request.state, "user") and request.state.user:
             user = request.state.user
-            if not has_permission(user.permissions, *permissions):
+            user_has_permission = has_permission(user.permissions, *permissions)
+            if not user_has_permission:
                 raise AppException(ErrorKey.NOT_AUTHORIZED_ACCESS_RESOURCE, status_code=403)
         else:
             raise AppException(status_code=403, error_key=ErrorKey.NOT_AUTHORIZED)
@@ -165,7 +166,7 @@ def socket_auth(required_permissions: list[str]):
             else:
                 raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Missing credentials")
 
-            if not set(required_permissions).issubset(set(perms)):
+            if "*" not in perms and not set(required_permissions).issubset(set(perms)):
                 raise WebSocketException(code=4403, reason="Invalid permissions")
 
             return SocketPrincipal(principal, user_id, perms, resolved_tenant_id)
@@ -296,3 +297,15 @@ async def auth_for_conversation_update(
     else:
         # Standard auth accepts both API key and JWT
         await auth(request, api_key, user)
+
+
+def verify_internal_secret(x_internal_secret: str = Header(...)):
+    """Validate the shared secret header for internal service-to-service calls."""
+    if not settings.WS_INTERNAL_SECRET:
+        raise AppException(
+            status_code=503, error_key=ErrorKey.INTERNAL_SERVER_ERROR, error_detail="WS_INTERNAL_SECRET not configured"
+        )
+    if x_internal_secret != settings.WS_INTERNAL_SECRET:
+        raise AppException(
+            status_code=403, error_key=ErrorKey.NOT_AUTHORIZED_ACCESS_RESOURCE, error_detail="Invalid internal secret"
+        )
