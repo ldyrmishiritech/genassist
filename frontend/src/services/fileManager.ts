@@ -1,6 +1,32 @@
 import { api, apiRequest, getApiUrl } from "@/config/api";
 import { setServerUp } from "@/config/serverStatus";
 import { AxiosError } from "axios";
+import type { FileManagerFileRecord } from "@/interfaces/file-manager.interface";
+
+export interface ListFileManagerFilesParams {
+  storage_provider?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const listFileManagerFiles = async (
+  params: ListFileManagerFilesParams = {}
+): Promise<FileManagerFileRecord[]> => {
+  const search = new URLSearchParams();
+  if (params.storage_provider != null && params.storage_provider !== "") {
+    search.set("storage_provider", params.storage_provider);
+  }
+  if (params.limit != null) {
+    search.set("limit", String(params.limit));
+  }
+  if (params.offset != null) {
+    search.set("offset", String(params.offset));
+  }
+  const qs = search.toString();
+  const path = qs ? `file-manager/files?${qs}` : "file-manager/files";
+  const data = await apiRequest<FileManagerFileRecord[]>("GET", path);
+  return data ?? [];
+};
 
 export interface FileManagerSettings {
   id?: string;
