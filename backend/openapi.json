@@ -29045,18 +29045,6 @@
               }
             ],
             "title": "Description"
-          },
-          "parent_group_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Group Id"
           }
         },
         "type": "object",
@@ -29084,18 +29072,6 @@
               }
             ],
             "title": "Description"
-          },
-          "parent_group_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Group Id"
           },
           "id": {
             "type": "string",
@@ -29136,18 +29112,6 @@
               }
             ],
             "title": "Description"
-          },
-          "parent_group_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Group Id"
           }
         },
         "type": "object",
