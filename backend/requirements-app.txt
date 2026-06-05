@@ -25,3 +25,6 @@ xgboost==1.7.4
 holidays==0.62
 pandas>=1.5.0
 fpdf2>=2.8.2
+fonttools>=4.61.0 # not directly required, pinned by Snyk to avoid a vulnerability
+pillow>=10.3.0 # not directly required, pinned by Snyk to avoid a vulnerability
+pyjwt>=2.12.0 # not directly required, pinned by Snyk to avoid a vulnerability
